@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +8,14 @@
   <title>ETF Advisor</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./assets/icons/icon-192.png">
+    <script>
+    // Appliquer le thème sauvegardé immédiatement (évite le flash)
+    (function() {
+      var t = localStorage.getItem('etf_theme');
+      if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      else document.documentElement.removeAttribute('data-theme');
+    })();
+  </script>
   <link rel="stylesheet" href="./assets/css/main.css">
   <style>body { background: #0a0c10; color: #e8eaf0; }</style>
 </head>

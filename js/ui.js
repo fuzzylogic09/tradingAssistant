@@ -6,12 +6,16 @@ const UI = (() => {
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   function initTheme() {
-    const saved = localStorage.getItem('etf_theme') || 'light';
+    const saved = localStorage.getItem('etf_theme') || 'light'; // light est le défaut
     applyTheme(saved, false);
   }
 
   function applyTheme(theme, save = true) {
-    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
     const btn = document.getElementById('theme-toggle');
     if (btn) {
       btn.innerHTML = theme === 'dark'
@@ -292,21 +296,24 @@ const UI = (() => {
         <span style="color:var(--red)">▼ ${d.analystSell||0} SELL</span>
       </div>` : '';
 
+    // Confiance Gemini indépendante (si disponible)
+    const llmConfBadge = llm
+      ? `<span class="llm-conf-badge ${sigClass}" title="Confiance Gemini">G: ${llm.confidence}%</span>`
+      : '';
+
     const llmHTML = llm ? `
       <div class="llm-block">
-        <div class="block-title">Analyse Gemini</div>
-        <div class="llm-reasoning">${llm.reasoning || ''}</div>
-        ${llm.keyFactors?.length ? `<div class="factors">${llm.keyFactors.map(f=>`<div class="factor">✓ ${f}</div>`).join('')}</div>` : ''}
-        ${llm.risks?.length ? `<div class="factors">${llm.risks.map(r=>`<div class="risk">⚠ ${r}</div>`).join('')}</div>` : ''}
-        ${(llm.targetPriceBuy||llm.targetPriceSell||llm.stopLoss) ? `
+        <div class="block-title-row">
+          <span class="block-title">Gemini — Analyse LLM</span>
+          <span class="llm-conf-inline ${sigClass}">${llm.confidence}% confiance</span>
+        </div>
+        <div class="llm-summary">${llm.summary || ''}</div>
+        ${(llm.targetSell || llm.stopLoss) ? `
           <div class="price-targets">
-            ${llm.targetPriceBuy  ? `<span class="pt-buy">Entrée $${Number(llm.targetPriceBuy).toFixed(2)}</span>` : ''}
-            ${llm.targetPriceSell ? `<span class="pt-sell">Cible $${Number(llm.targetPriceSell).toFixed(2)}</span>` : ''}
-            ${llm.stopLoss        ? `<span class="pt-stop">Stop $${Number(llm.stopLoss).toFixed(2)}</span>` : ''}
+            ${llm.targetSell ? `<span class="pt-sell">Objectif $${Number(llm.targetSell).toFixed(2)}</span>` : ''}
+            ${llm.stopLoss   ? `<span class="pt-stop">Stop $${Number(llm.stopLoss).toFixed(2)}</span>` : ''}
           </div>` : ''}
-        ${llm.timeHorizon ? `<div class="horizon">Horizon: <strong>${llm.timeHorizon}</strong></div>` : ''}
-        ${llm.marketContext ? `<div class="mkt-ctx">${llm.marketContext}</div>` : ''}
-      </div>` : `<div class="llm-block muted"><div class="block-title">Analyse Gemini</div><span style="font-size:11px;color:var(--text-3)">Clé Gemini non configurée — analyse technique seule.</span></div>`;
+      </div>` : `<div class="llm-block muted"><div class="block-title">Gemini</div><span style="font-size:11px;color:var(--text-3)">Clé Gemini non configurée — analyse technique seule.</span></div>`;
 
     const fgColor = d.fearGreedScore == null ? 'var(--text-3)'
       : d.fearGreedScore < 25 ? 'var(--red)' : d.fearGreedScore < 45 ? 'var(--amber)'
@@ -335,24 +342,32 @@ const UI = (() => {
       <div class="signal-block ${sigClass}">
         <div class="signal-main-row">
           <div class="sig-badge">${sigLabel}</div>
+
+          <!-- Score technique -->
           <div class="confidence-score">
-            <span class="conf-number">${finalConf.toFixed(0)}</span>
-            <span class="conf-label">confiance %</span>
+            <span class="conf-number">${det.confidence?.toFixed(0) ?? finalConf.toFixed(0)}</span>
+            <span class="conf-label">Tech %</span>
           </div>
+
+          <!-- Score Gemini (si disponible) -->
+          ${llm ? `<div class="confidence-score llm-score">
+            <span class="conf-number">${llm.confidence.toFixed(0)}</span>
+            <span class="conf-label">Gemini %</span>
+          </div>` : ''}
+
           <div class="conf-bar-row">
             <div class="conf-track">
               <div class="conf-fill" style="width:${Math.min(finalConf,100)}%"></div>
             </div>
             <div class="conf-meta">
               <span>${confText}</span>
-              ${llm ? '<span>LLM+Tech</span>' : '<span>Tech seule</span>'}
+              <span>${llm ? 'Tech + LLM' : 'Tech seule'}</span>
             </div>
           </div>
         </div>
         <div class="signal-badges-row">
           ${gainBadge}
           <span class="trend-badge ${trendClass}">${trendLabel}</span>
-          ${llm?.timeHorizon ? `<span class="trend-badge">⏱ ${llm.timeHorizon}</span>` : ''}
         </div>
       </div>
 

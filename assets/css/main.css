@@ -444,6 +444,36 @@ html, body { height: 100%; background: var(--bg-deep); color: var(--text); font-
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 3px; }
 
+
+/* ── Double score de confiance (Tech + LLM) ─────────────────────────────── */
+.block-title-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.llm-conf-inline {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 10px;
+}
+.sig-buy  .llm-conf-inline { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-bd); }
+.sig-sell .llm-conf-inline { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-bd); }
+.sig-hold .llm-conf-inline { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-bd); }
+
+.llm-summary {
+  font-size: 12px; color: var(--text-2); line-height: 1.65;
+}
+
+/* Score Gemini: fond légèrement différent du score Tech */
+.llm-score {
+  opacity: 0.85;
+  border-style: dashed !important;
+}
+
+/* Forcer le fond clair au démarrage (avant JS) */
+html:not([data-theme="dark"]) {
+  background: #f0f2f5;
+  color: #0f1117;
+}
+
 @media (max-width: 600px) {
   .app-content { padding: 10px; }
   #cards-container { grid-template-columns: 1fr; }
