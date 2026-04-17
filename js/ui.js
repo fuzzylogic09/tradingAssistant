@@ -1,17 +1,40 @@
-// ui.js — Interface utilisateur complète
+// ui.js — Interface utilisateur
 
 const UI = (() => {
 
   let assetsDB = [];
 
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  function initTheme() {
+    const saved = localStorage.getItem('etf_theme') || 'light';
+    applyTheme(saved, false);
+  }
+
+  function applyTheme(theme, save = true) {
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
+    const btn = document.getElementById('theme-toggle');
+    if (btn) {
+      btn.innerHTML = theme === 'dark'
+        ? '<span class="icon">☀️</span> Thème clair'
+        : '<span class="icon">🌙</span> Thème sombre';
+    }
+    if (save) localStorage.setItem('etf_theme', theme);
+  }
+
+  function toggleTheme() {
+    const current = localStorage.getItem('etf_theme') || 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  }
+
   // ── Init ──────────────────────────────────────────────────────────────────
   function init(assets) {
     assetsDB = assets;
+    initTheme();
 
     document.querySelectorAll('[data-tab]').forEach(btn =>
       btn.addEventListener('click', () => switchTab(btn.dataset.tab))
     );
-
+    document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
     document.getElementById('btn-analyze-all')?.addEventListener('click', () => App.analyzeAll());
     document.getElementById('btn-save-config')?.addEventListener('click', saveConfig);
     document.getElementById('btn-test-key')?.addEventListener('click', testGeminiKey);
@@ -22,7 +45,6 @@ const UI = (() => {
     document.getElementById('btn-reset-watchlist')?.addEventListener('click', () => {
       Watchlist.reset(); renderWatchlist(); renderCards();
     });
-
     loadConfigIntoForm();
   }
 
@@ -46,26 +68,30 @@ const UI = (() => {
     updateKeyStatus(k ? 'saved' : 'missing');
   }
 
-  function updateKeyStatus(state) {
+  function updateKeyStatus(state, modelName) {
     const el = document.getElementById('key-status');
+    const mi = document.getElementById('model-info');
     if (!el) return;
     const map = {
       missing:  { text: 'Non configurée', cls: 'status-warn' },
       saved:    { text: 'Configurée (session)', cls: 'status-ok' },
       valid:    { text: 'Valide ✓', cls: 'status-ok' },
       invalid:  { text: 'Invalide ✗', cls: 'status-err' },
-      testing:  { text: 'Test en cours…', cls: 'status-neutral' },
+      testing:  { text: 'Détection modèle…', cls: 'status-neutral' },
     };
     const s = map[state] || map.missing;
-    el.textContent = s.text;
-    el.className = `key-status ${s.cls}`;
+    el.textContent = s.text; el.className = `key-status ${s.cls}`;
+    if (mi) mi.innerHTML = modelName
+      ? `Modèle actif: <strong>${modelName}</strong>`
+      : '';
   }
 
   function saveConfig() {
     const key = document.getElementById('input-gemini-key')?.value?.trim();
     const mg  = parseFloat(document.getElementById('input-min-gain')?.value || '2');
-    if (key) { Config.setGeminiKey(key); updateKeyStatus('saved'); }
+    if (key) { Config.setGeminiKey(key); }
     Config.setMinGainPct(isNaN(mg) ? 2 : mg);
+    updateKeyStatus(key ? 'saved' : 'missing');
     showToast('Configuration sauvegardée', 'success');
   }
 
@@ -76,36 +102,28 @@ const UI = (() => {
     btn.textContent = 'Test…'; btn.disabled = true;
     updateKeyStatus('testing');
     try {
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: 'OK' }] }] }) }
-      );
-      if (resp.ok) {
-        updateKeyStatus('valid');
-        showToast('Clé Gemini valide ✓', 'success');
-      } else {
-        const err = await resp.json();
-        updateKeyStatus('invalid');
-        showToast(`Invalide: ${err?.error?.message || resp.status}`, 'error');
-      }
+      // Utilise LLMInterface.testKey qui auto-détecte le bon modèle
+      const model = await LLMInterface.testKey(key);
+      Config.setGeminiKey(key); // Sauvegarder si valide
+      updateKeyStatus('valid', model);
+      showToast(`Clé valide — modèle: ${model}`, 'success');
     } catch (e) {
       updateKeyStatus('invalid');
-      showToast(`Erreur réseau: ${e.message}`, 'error');
+      showToast(`Erreur: ${e.message}`, 'error');
     }
     btn.textContent = 'Tester la clé'; btn.disabled = false;
   }
 
   // ── Watchlist ─────────────────────────────────────────────────────────────
   function renderWatchlist() {
-    const container = document.getElementById('watchlist-items');
-    if (!container) return;
+    const c = document.getElementById('watchlist-items');
+    if (!c) return;
     const list = Watchlist.get();
-    if (list.length === 0) {
-      container.innerHTML = '<p style="color:var(--text-muted);font-size:12px;">Watchlist vide.</p>';
+    if (!list.length) {
+      c.innerHTML = '<p style="color:var(--text-3);font-size:12px;">Watchlist vide. Ajoutez des actifs via l\'onglet "Actifs".</p>';
       return;
     }
-    container.innerHTML = list.map(sym => `
+    c.innerHTML = list.map(sym => `
       <div class="watchlist-item">
         <span class="wl-symbol">${sym}</span>
         <span class="wl-name">${getAssetName(sym)}</span>
@@ -121,8 +139,7 @@ const UI = (() => {
     const sym = input?.value?.toUpperCase().trim();
     if (!sym) return;
     if (Watchlist.add(sym)) {
-      input.value = '';
-      renderWatchlist(); renderCards();
+      input.value = ''; renderWatchlist(); renderCards();
       showToast(`${sym} ajouté`, 'success');
     } else {
       showToast(`${sym} déjà dans la watchlist`, 'error');
@@ -131,7 +148,6 @@ const UI = (() => {
 
   function removeFromWatchlist(sym) {
     Watchlist.remove(sym);
-    // Supprimer la carte du dashboard
     document.getElementById(`card-${sym}`)?.remove();
     renderWatchlist();
     showToast(`${sym} retiré`, 'success');
@@ -142,18 +158,19 @@ const UI = (() => {
     setTimeout(() => App.analyzeSymbol(sym), 50);
   }
 
-  // ── Cards Dashboard ───────────────────────────────────────────────────────
+  // ── Cards ─────────────────────────────────────────────────────────────────
   function renderCards() {
     const container = document.getElementById('cards-container');
     if (!container) return;
     const list = Watchlist.get();
 
-    if (list.length === 0) {
+    if (!list.length) {
       container.innerHTML = '<p class="empty-state">Ajoutez des actifs dans la Watchlist pour commencer.</p>';
       return;
     }
+    // Supprimer l'état vide
+    container.querySelector('.empty-state')?.remove();
 
-    // Créer les cartes manquantes
     list.forEach(sym => {
       if (!document.getElementById(`card-${sym}`)) {
         const card = document.createElement('div');
@@ -173,7 +190,6 @@ const UI = (() => {
       }
     });
 
-    // Supprimer les cartes obsolètes
     container.querySelectorAll('.asset-card').forEach(card => {
       const sym = card.id.replace('card-', '');
       if (!list.includes(sym)) card.remove();
@@ -199,102 +215,108 @@ const UI = (() => {
           <span class="loading-msg">${message}</span>
         </div>`;
     } else if (status === 'error') {
-      const card2 = document.getElementById(`card-${symbol}`);
-      const body = card2?.querySelector('.card-idle-body, .loading-state');
+      const body = card.querySelector('.card-idle-body, .loading-state');
       if (body) {
+        body.className = 'card-idle-body loading-state';
         body.innerHTML = `<span class="error-msg">⚠ ${message}</span>
           <button class="btn-sm" style="margin-top:8px" onclick="App.analyzeSymbol('${symbol}')">Réessayer</button>`;
       }
     }
   }
 
-  // ── Mini sparkline SVG ────────────────────────────────────────────────────
+  // ── Mini sparkline ────────────────────────────────────────────────────────
   function makeSparkline(closes, changePct) {
     if (!closes || closes.length < 2) return '';
-    const w = 100, h = 32;
-    const min = Math.min(...closes);
-    const max = Math.max(...closes);
+    const w = 80, h = 28;
+    const min = Math.min(...closes), max = Math.max(...closes);
     const range = max - min || 1;
     const pts = closes.map((c, i) => {
       const x = (i / (closes.length - 1)) * w;
-      const y = h - ((c - min) / range) * h;
+      const y = h - ((c - min) / range) * (h - 2) - 1;
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
-    const color = (changePct ?? 0) >= 0 ? '#00d97e' : '#ff4d6a';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const upColor   = isDark ? '#00d97e' : '#00a65a';
+    const downColor = isDark ? '#ff4d6a' : '#d9314a';
+    const color = (changePct ?? 0) >= 0 ? upColor : downColor;
     return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block">
-      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/>
+      <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>`;
   }
 
-  // ── Rendu d'une carte complète ────────────────────────────────────────────
+  // ── Rendu carte complète ──────────────────────────────────────────────────
   function renderCard(symbol, result) {
     const { marketData: d, deterministicResult: det, llmResult: llm } = result;
 
     const finalSignal = llm?.signal || det.signal;
     const finalConf   = llm?.confidence ?? det.confidence ?? 0;
     const meetsGain   = llm?.meetsMinGain || det.meetsMinGain;
+    const trend       = llm?.trendAssessment || 'uncertain';
 
     const sigClass = { BUY: 'sig-buy', SELL: 'sig-sell', HOLD: 'sig-hold' }[finalSignal] || 'sig-hold';
     const sigLabel = { BUY: '▲ ACHETER', SELL: '▼ VENDRE', HOLD: '— ATTENDRE' }[finalSignal];
 
-    const cp  = d.changePct ?? 0;
+    const cp = d.changePct ?? 0;
     const cpStr = `${cp >= 0 ? '+' : ''}${cp.toFixed(2)}%`;
     const priceStr = d.price != null ? `$${d.price.toFixed(2)}` : '—';
+    const spark = makeSparkline(d.closes, cp);
+
+    // Niveau de confiance: description textuelle
+    const confText = finalConf >= 75 ? 'Élevée' : finalConf >= 55 ? 'Modérée' : finalConf >= 35 ? 'Faible' : 'Très faible';
 
     const rulesHTML = det.allTriggeredRules?.length > 0
       ? det.allTriggeredRules.map(r => `
           <div class="rule-pill ${r.signal.toLowerCase()}">
             <span>${r.name}</span>
-            <span class="pill-conf">${(r.confidence * 100).toFixed(0)}%</span>
+            <span class="pill-conf">${(r.confidence*100).toFixed(0)}%</span>
           </div>`).join('')
-      : '<span class="no-rules">Aucune règle déclenchée — signal HOLD par défaut</span>';
+      : '<span class="no-rules">Aucune règle — HOLD par défaut</span>';
 
     const gainBadge = meetsGain
       ? `<span class="gain-ok">≥ ${Config.getMinGainPct()}% ✓</span>`
       : `<span class="gain-no">< ${Config.getMinGainPct()}%</span>`;
 
-    const spark = makeSparkline(d.closes, cp);
+    const trendClass = trend === 'bullish' ? 'trend-bullish' : trend === 'bearish' ? 'trend-bearish' : '';
+    const trendLabel = { bullish: '↗ Haussier', bearish: '↘ Baissier', neutral: '→ Neutre', uncertain: '? Incertain' }[trend] || '?';
 
-    // Bloc analystes
-    const totalAnalysts = (d.analystBuy || 0) + (d.analystHold || 0) + (d.analystSell || 0);
-    const analystHTML = totalAnalysts > 0 ? `
+    const totalAn = (d.analystBuy||0)+(d.analystHold||0)+(d.analystSell||0);
+    const analystHTML = totalAn > 0 ? `
       <div class="analyst-bar">
-        <div class="ab-buy"  style="flex:${d.analystBuy}"  title="BUY ${d.analystBuy}"></div>
-        <div class="ab-hold" style="flex:${d.analystHold}" title="HOLD ${d.analystHold}"></div>
-        <div class="ab-sell" style="flex:${d.analystSell}" title="SELL ${d.analystSell}"></div>
+        <div class="ab-buy"  style="flex:${d.analystBuy||0}" ></div>
+        <div class="ab-hold" style="flex:${d.analystHold||0}"></div>
+        <div class="ab-sell" style="flex:${d.analystSell||0}"></div>
       </div>
       <div class="analyst-labels">
-        <span style="color:var(--green)">▲${d.analystBuy}</span>
-        <span style="color:var(--text-muted)">—${d.analystHold}</span>
-        <span style="color:var(--red)">▼${d.analystSell}</span>
+        <span style="color:var(--green)">▲ ${d.analystBuy||0} BUY</span>
+        <span style="color:var(--text-3)">— ${d.analystHold||0} HOLD</span>
+        <span style="color:var(--red)">▼ ${d.analystSell||0} SELL</span>
       </div>` : '';
 
     const llmHTML = llm ? `
       <div class="llm-block">
-        <div class="block-title">Gemini — Analyse LLM</div>
+        <div class="block-title">Analyse Gemini</div>
         <div class="llm-reasoning">${llm.reasoning || ''}</div>
-        ${llm.keyFactors?.length ? `<div class="factors">${llm.keyFactors.map(f => `<div class="factor">✓ ${f}</div>`).join('')}</div>` : ''}
-        ${llm.risks?.length ? `<div class="factors">${llm.risks.map(r => `<div class="risk">⚠ ${r}</div>`).join('')}</div>` : ''}
-        ${llm.targetPriceBuy || llm.targetPriceSell || llm.stopLoss ? `
+        ${llm.keyFactors?.length ? `<div class="factors">${llm.keyFactors.map(f=>`<div class="factor">✓ ${f}</div>`).join('')}</div>` : ''}
+        ${llm.risks?.length ? `<div class="factors">${llm.risks.map(r=>`<div class="risk">⚠ ${r}</div>`).join('')}</div>` : ''}
+        ${(llm.targetPriceBuy||llm.targetPriceSell||llm.stopLoss) ? `
           <div class="price-targets">
-            ${llm.targetPriceBuy  ? `<span class="pt-buy">Entrée $${llm.targetPriceBuy.toFixed(2)}</span>` : ''}
-            ${llm.targetPriceSell ? `<span class="pt-sell">Cible $${llm.targetPriceSell.toFixed(2)}</span>` : ''}
-            ${llm.stopLoss        ? `<span class="pt-stop">Stop $${llm.stopLoss.toFixed(2)}</span>` : ''}
+            ${llm.targetPriceBuy  ? `<span class="pt-buy">Entrée $${Number(llm.targetPriceBuy).toFixed(2)}</span>` : ''}
+            ${llm.targetPriceSell ? `<span class="pt-sell">Cible $${Number(llm.targetPriceSell).toFixed(2)}</span>` : ''}
+            ${llm.stopLoss        ? `<span class="pt-stop">Stop $${Number(llm.stopLoss).toFixed(2)}</span>` : ''}
           </div>` : ''}
         ${llm.timeHorizon ? `<div class="horizon">Horizon: <strong>${llm.timeHorizon}</strong></div>` : ''}
         ${llm.marketContext ? `<div class="mkt-ctx">${llm.marketContext}</div>` : ''}
-      </div>` : `<div class="llm-block muted">Clé Gemini non configurée — seule l'analyse technique est disponible.</div>`;
+      </div>` : `<div class="llm-block muted"><div class="block-title">Analyse Gemini</div><span style="font-size:11px;color:var(--text-3)">Clé Gemini non configurée — analyse technique seule.</span></div>`;
 
-    const fgColor = d.fearGreedScore == null ? 'var(--text-muted)'
+    const fgColor = d.fearGreedScore == null ? 'var(--text-3)'
       : d.fearGreedScore < 25 ? 'var(--red)' : d.fearGreedScore < 45 ? 'var(--amber)'
-      : d.fearGreedScore > 75 ? 'var(--green)' : 'var(--text-secondary)';
+      : d.fearGreedScore > 75 ? 'var(--green)' : 'var(--text-2)';
 
     const card = document.getElementById(`card-${symbol}`);
     if (!card) return;
 
     card.className = `asset-card ${sigClass}`;
     card.innerHTML = `
-      <!-- HEADER -->
       <div class="card-header">
         <div class="card-title-row">
           <span class="card-symbol">${symbol}</span>
@@ -309,119 +331,96 @@ const UI = (() => {
         </div>
       </div>
 
-      <!-- SIGNAL -->
-      <div class="signal-row">
-        <div class="sig-badge ${sigClass}">${sigLabel}</div>
-        <div class="conf-wrap">
-          <div class="conf-track">
-            <div class="conf-fill ${sigClass}" style="width:${Math.min(finalConf,100)}%"></div>
+      <!-- ═══ SIGNAL + SCORE DE CONFIANCE ═══ -->
+      <div class="signal-block ${sigClass}">
+        <div class="signal-main-row">
+          <div class="sig-badge">${sigLabel}</div>
+          <div class="confidence-score">
+            <span class="conf-number">${finalConf.toFixed(0)}</span>
+            <span class="conf-label">confiance %</span>
           </div>
-          <span class="conf-val">${finalConf.toFixed(0)}%</span>
+          <div class="conf-bar-row">
+            <div class="conf-track">
+              <div class="conf-fill" style="width:${Math.min(finalConf,100)}%"></div>
+            </div>
+            <div class="conf-meta">
+              <span>${confText}</span>
+              ${llm ? '<span>LLM+Tech</span>' : '<span>Tech seule</span>'}
+            </div>
+          </div>
         </div>
-        ${gainBadge}
+        <div class="signal-badges-row">
+          ${gainBadge}
+          <span class="trend-badge ${trendClass}">${trendLabel}</span>
+          ${llm?.timeHorizon ? `<span class="trend-badge">⏱ ${llm.timeHorizon}</span>` : ''}
+        </div>
       </div>
 
-      <!-- BODY -->
       <div class="card-body">
-
         <!-- Indicateurs -->
         <div class="inds-grid">
-          <div class="ind">
-            <span class="ind-l">RSI</span>
-            <span class="ind-v ${d.rsi < 30 ? 'v-green' : d.rsi > 70 ? 'v-red' : ''}">
-              ${d.rsi?.toFixed(1) ?? '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">Bollinger</span>
-            <span class="ind-v ${d.bollingerPosition < 0.15 ? 'v-green' : d.bollingerPosition > 0.85 ? 'v-red' : ''}">
-              ${d.bollingerPosition != null ? `${(d.bollingerPosition*100).toFixed(0)}%` : '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">Vol ×</span>
-            <span class="ind-v ${d.volumeRatio > 1.5 ? 'v-amber' : ''}">
-              ${d.volumeRatio?.toFixed(2) ?? '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">F&G</span>
-            <span class="ind-v" style="color:${fgColor}">
-              ${d.fearGreedScore ?? '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">Beta</span>
-            <span class="ind-v">${d.beta?.toFixed(2) ?? '—'}</span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">Gap</span>
-            <span class="ind-v ${d.gapPct > 0 ? 'v-green' : d.gapPct < 0 ? 'v-red' : ''}">
-              ${d.gapPct != null ? `${d.gapPct > 0 ? '+' : ''}${d.gapPct.toFixed(2)}%` : '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">MACD</span>
-            <span class="ind-v ${d.macd?.crossover === 'bullish' ? 'v-green' : d.macd?.crossover === 'bearish' ? 'v-red' : ''}">
-              ${d.macd ? (d.macd.crossover ? d.macd.crossover : d.macd.histogram.toFixed(3)) : '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">SMA20/50</span>
-            <span class="ind-v ${d.price > d.sma20 && d.sma20 > d.sma50 ? 'v-green' : d.price < d.sma20 && d.sma20 < d.sma50 ? 'v-red' : ''}">
-              ${d.sma20 && d.sma50 ? (d.price > d.sma20 ? '▲' : '▼') : '—'}
-            </span>
-          </div>
-          <div class="ind">
-            <span class="ind-l">Short %</span>
-            <span class="ind-v">${d.shortPct != null ? `${(d.shortPct*100).toFixed(1)}%` : '—'}</span>
-          </div>
+          <div class="ind"><span class="ind-l">RSI</span>
+            <span class="ind-v ${d.rsi != null && d.rsi < 30 ? 'v-green' : d.rsi > 70 ? 'v-red' : ''}">${d.rsi?.toFixed(1) ?? '—'}</span></div>
+          <div class="ind"><span class="ind-l">Bollinger %</span>
+            <span class="ind-v ${d.bollingerPosition < 0.15 ? 'v-green' : d.bollingerPosition > 0.85 ? 'v-red' : ''}">${d.bollingerPosition != null ? `${(d.bollingerPosition*100).toFixed(0)}%` : '—'}</span></div>
+          <div class="ind"><span class="ind-l">Vol ×</span>
+            <span class="ind-v ${d.volumeRatio > 1.5 ? 'v-amber' : ''}">${d.volumeRatio?.toFixed(2) ?? '—'}</span></div>
+          <div class="ind"><span class="ind-l">F&amp;G</span>
+            <span class="ind-v" style="color:${fgColor}">${d.fearGreedScore ?? '—'}</span></div>
+          <div class="ind"><span class="ind-l">Beta</span>
+            <span class="ind-v">${d.beta?.toFixed(2) ?? '—'}</span></div>
+          <div class="ind"><span class="ind-l">Gap</span>
+            <span class="ind-v ${d.gapPct > 0 ? 'v-green' : d.gapPct < 0 ? 'v-red' : ''}">${d.gapPct != null ? `${d.gapPct > 0 ? '+' : ''}${d.gapPct.toFixed(2)}%` : '—'}</span></div>
+          <div class="ind"><span class="ind-l">MACD</span>
+            <span class="ind-v ${d.macd?.crossover === 'bullish' ? 'v-green' : d.macd?.crossover === 'bearish' ? 'v-red' : ''}">${d.macd?.crossover ? d.macd.crossover : d.macd?.histogram?.toFixed(3) ?? '—'}</span></div>
+          <div class="ind"><span class="ind-l">SMA20/50</span>
+            <span class="ind-v ${d.price > d.sma20 && d.sma20 > d.sma50 ? 'v-green' : d.price < d.sma20 && d.sma20 < d.sma50 ? 'v-red' : ''}">${d.sma20 && d.sma50 ? (d.price > d.sma20 ? '▲ haussier' : '▼ baissier') : '—'}</span></div>
+          <div class="ind"><span class="ind-l">ATR</span>
+            <span class="ind-v">${d.atr && d.price ? `${((d.atr/d.price)*100).toFixed(2)}%` : '—'}</span></div>
         </div>
 
-        <!-- Analystes -->
         ${analystHTML}
 
-        <!-- Règles -->
         <div class="rules-block">
-          <div class="block-title">Règles techniques (${det.allTriggeredRules?.length || 0} / confluence ≥ ${det.confluence?.required || 2})</div>
+          <div class="block-title">Règles techniques — ${det.allTriggeredRules?.length || 0} déclenchées (confluence ≥ ${det.confluence?.required || 2})</div>
           <div class="rules-pills">${rulesHTML}</div>
-          <div class="conf-info">▲ ${det.confluence?.buy || 0} BUY  ▼ ${det.confluence?.sell || 0} SELL</div>
+          <div class="conf-info">▲ ${det.confluence?.buy||0} BUY  ▼ ${det.confluence?.sell||0} SELL  (scores: BUY ${det.buyScore||0} / SELL ${det.sellScore||0})</div>
         </div>
 
-        <!-- LLM -->
         ${llmHTML}
-
       </div>
 
-      <!-- FOOTER -->
       <div class="card-footer">
         <span>${d.sources?.join(' · ') || '—'}</span>
         <span>${new Date(d.timestamp).toLocaleTimeString('fr-FR')}</span>
       </div>`;
   }
 
-  // ── Résumé global (barre en haut du dashboard) ────────────────────────────
+  // ── Summary bar ───────────────────────────────────────────────────────────
   function updateSummary(analyses) {
     const el = document.getElementById('summary-bar');
     if (!el) return;
     const vals = Object.values(analyses);
-    if (vals.length === 0) { el.innerHTML = ''; return; }
-    const buy  = vals.filter(a => (a.llmResult?.signal || a.deterministicResult?.signal) === 'BUY').length;
-    const sell = vals.filter(a => (a.llmResult?.signal || a.deterministicResult?.signal) === 'SELL').length;
+    if (!vals.length) { el.innerHTML = ''; return; }
+    const getSignal = a => a.llmResult?.signal || a.deterministicResult?.signal || 'HOLD';
+    const buy  = vals.filter(a => getSignal(a) === 'BUY').length;
+    const sell = vals.filter(a => getSignal(a) === 'SELL').length;
     const hold = vals.length - buy - sell;
+    const avgConf = Math.round(vals.reduce((s,a) => s + (a.llmResult?.confidence ?? a.deterministicResult?.confidence ?? 0), 0) / vals.length);
     el.innerHTML = `
-      <span class="sum-item sum-buy">▲ ${buy} BUY</span>
-      <span class="sum-item sum-sell">▼ ${sell} SELL</span>
-      <span class="sum-item sum-hold">— ${hold} HOLD</span>`;
+      <span class="sum-item sum-buy">▲ ${buy} ACHAT</span>
+      <span class="sum-item sum-sell">▼ ${sell} VENTE</span>
+      <span class="sum-item sum-hold">— ${hold} ATTENDRE</span>
+      <span class="sum-sep">·</span>
+      <span class="sum-item" style="background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bd)">Confiance moy. ${avgConf}%</span>`;
   }
 
-  // ── Base d'actifs ─────────────────────────────────────────────────────────
+  // ── Assets DB ─────────────────────────────────────────────────────────────
   function renderAssetsDB() {
-    const container = document.getElementById('assets-grid');
-    if (!container) return;
-    container.innerHTML = assetsDB.map(a => {
+    const c = document.getElementById('assets-grid');
+    if (!c) return;
+    c.innerHTML = assetsDB.map(a => {
       const inWL = Watchlist.get().includes(a.symbol);
-      const dots = '●'.repeat(a.riskLevel) + '○'.repeat(5 - a.riskLevel);
       return `
         <div class="asset-db-card ${a.recommended ? 'rec' : ''}">
           ${a.recommended ? '<span class="rec-badge">Recommandé</span>' : ''}
@@ -429,9 +428,8 @@ const UI = (() => {
           <div class="db-name">${a.name}</div>
           <div class="db-cat">${a.category}</div>
           <div class="db-desc">${a.description}</div>
-          <div class="db-risk" title="Risque ${a.riskLevel}/5">${dots}</div>
-          <button class="btn-sm ${inWL ? 'btn-remove' : 'btn-add'}"
-            onclick="UI.toggleDB('${a.symbol}', this)">
+          <div class="db-risk" title="Risque ${a.riskLevel}/5">${'●'.repeat(a.riskLevel)}${'○'.repeat(5-a.riskLevel)}</div>
+          <button class="btn-sm ${inWL ? 'btn-remove' : 'btn-add'}" onclick="UI.toggleDB('${a.symbol}',this)">
             ${inWL ? '✕ Retirer' : '+ Watchlist'}
           </button>
         </div>`;
@@ -448,7 +446,6 @@ const UI = (() => {
       btn.textContent = '✕ Retirer'; btn.className = 'btn-sm btn-remove';
     }
     renderWatchlist();
-    showToast(`${sym} ${Watchlist.get().includes(sym) ? 'ajouté' : 'retiré'}`, 'success');
   }
 
   // ── Utilitaires ───────────────────────────────────────────────────────────
@@ -468,11 +465,10 @@ const UI = (() => {
 
   function showToast(msg, type = 'info') {
     const t = document.createElement('div');
-    t.className = `toast toast-${type}`;
-    t.textContent = msg;
+    t.className = `toast toast-${type}`; t.textContent = msg;
     document.body.appendChild(t);
     requestAnimationFrame(() => t.classList.add('show'));
-    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
+    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500);
   }
 
   return {
