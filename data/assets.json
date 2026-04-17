@@ -1,0 +1,132 @@
+{
+  "assets": [
+    {
+      "symbol": "TQQQ",
+      "name": "ProShares UltraPro QQQ",
+      "category": "ETF Leveraged",
+      "description": "3x Nasdaq-100. Très volatile, idéal scalp.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "SOXL",
+      "name": "Direxion Daily Semiconductors Bull 3X",
+      "category": "ETF Leveraged",
+      "description": "3x semiconducteurs. Fortement lié à NVDA/AMD.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "UVXY",
+      "name": "ProShares Ultra VIX Short-Term Futures",
+      "category": "ETF Volatilité",
+      "description": "Joue sur la volatilité implicite (VIX). Spéculatif.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "SPXL",
+      "name": "Direxion Daily S&P 500 Bull 3X",
+      "category": "ETF Leveraged",
+      "description": "3x S&P 500. Moins volatile que TQQQ.",
+      "riskLevel": 4,
+      "recommended": true
+    },
+    {
+      "symbol": "TECL",
+      "name": "Direxion Daily Technology Bull 3X",
+      "category": "ETF Leveraged",
+      "description": "3x secteur tech XLK.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "FNGU",
+      "name": "MicroSectors FANG+ Index 3X ETN",
+      "category": "ETN Leveraged",
+      "description": "3x FANG+ (Meta, Apple, Nvidia, Google…).",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "LABU",
+      "name": "Direxion Daily S&P Biotech Bull 3X",
+      "category": "ETF Leveraged",
+      "description": "3x biotech. Très réactif aux news FDA.",
+      "riskLevel": 5,
+      "recommended": false
+    },
+    {
+      "symbol": "BITO",
+      "name": "ProShares Bitcoin ETF",
+      "category": "ETF Crypto",
+      "description": "Exposition Bitcoin via futures. Volatile 24h.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "QQQ",
+      "name": "Invesco QQQ Trust",
+      "category": "ETF Standard",
+      "description": "Nasdaq-100 non-leveragé. Référence.",
+      "riskLevel": 3,
+      "recommended": false
+    },
+    {
+      "symbol": "NVDA",
+      "name": "NVIDIA Corporation",
+      "category": "Action",
+      "description": "IA/GPU. Très liquide, forte volatilité.",
+      "riskLevel": 4,
+      "recommended": true
+    },
+    {
+      "symbol": "TSLA",
+      "name": "Tesla Inc.",
+      "category": "Action",
+      "description": "Très volatile, très liquide, réactif aux news.",
+      "riskLevel": 4,
+      "recommended": true
+    },
+    {
+      "symbol": "AMD",
+      "name": "Advanced Micro Devices",
+      "category": "Action",
+      "description": "Semiconducteurs, corrélé NVDA.",
+      "riskLevel": 4,
+      "recommended": true
+    },
+    {
+      "symbol": "MSTR",
+      "name": "MicroStrategy Inc.",
+      "category": "Action",
+      "description": "Proxy Bitcoin en bourse. Volatilité extrême.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "COIN",
+      "name": "Coinbase Global Inc.",
+      "category": "Action",
+      "description": "Exchange crypto coté. Suit Bitcoin/Ethereum.",
+      "riskLevel": 5,
+      "recommended": true
+    },
+    {
+      "symbol": "VT",
+      "name": "Vanguard Total World Stock ETF",
+      "category": "ETF Standard",
+      "description": "Monde entier. Peu volatile, référence LT.",
+      "riskLevel": 2,
+      "recommended": false
+    },
+    {
+      "symbol": "SPY",
+      "name": "SPDR S&P 500 ETF Trust",
+      "category": "ETF Standard",
+      "description": "S&P 500. Référence marché US.",
+      "riskLevel": 3,
+      "recommended": false
+    }
+  ]
+}
